@@ -1,163 +1,159 @@
 /**
- * API Call Optimization Refactor
- * Key improvements:
- * - Request caching
- * - Deduplication
- * - Error handling standardization
- * - Parameter validation
+ * Recent Searches Dropdown Styling Fixes
+ * Addresses:
+ * - Text visibility issues
+ * - Scroll behavior
+ * - Z-index layering
+ * - Mobile responsiveness
  */
 
-// 1. Create API service module
-const WeatherAPI = {
-    cache: new Map(),
-    lastRequestTime: 0,
-    RATE_LIMIT: 1000, // 1 second between calls
-  
-    /**
-     * Get weather data with caching and rate limiting
-     * @param {string} endpoint - API endpoint
-     * @param {Object} params - Request parameters
-     * @returns {Promise<Object>}
-     */
-    async fetchWeatherData(endpoint, params = {}) {
-      // Validate input
-      if (!endpoint) throw new Error('Endpoint is required');
-      if (!API_KEY) throw new Error('API key not configured');
-  
-      // Create cache key
-      const cacheKey = this.createCacheKey(endpoint, params);
-      
-      // Check cache first
-      if (this.cache.has(cacheKey)) {
-        console.log('Returning cached data for', cacheKey);
-        return this.cache.get(cacheKey);
-      }
-  
-      // Rate limit protection
-      await this.enforceRateLimit();
-  
-      try {
-        const url = this.buildRequestUrl(endpoint, params);
-        const response = await this.executeRequest(url);
-  
-        // Cache successful responses
-        this.cache.set(cacheKey, response);
-        return response;
-  
-      } catch (error) {
-        console.error('API request failed:', error);
-        throw this.normalizeError(error);
-      }
-    },
-  
-    // Helper methods
-    createCacheKey(endpoint, params) {
-      const sortedParams = Object.keys(params)
-        .sort()
-        .map(key => `${key}=${params[key]}`)
-        .join('&');
-      return `${endpoint}?${sortedParams}`;
-    },
-  
-    async enforceRateLimit() {
-      const now = Date.now();
-      const elapsed = now - this.lastRequestTime;
-      
-      if (elapsed < this.RATE_LIMIT) {
-        const delay = this.RATE_LIMIT - elapsed;
-        console.log(`Rate limiting - delaying ${delay}ms`);
-        await new Promise(resolve => setTimeout(resolve, delay));
-      }
-      
-      this.lastRequestTime = Date.now();
-    },
-  
-    buildRequestUrl(endpoint, params) {
-      const baseUrl = `${BASE_URL}/${endpoint}`;
-      const queryParams = new URLSearchParams({
-        ...params,
-        appid: API_KEY,
-        units: 'metric'
-      });
-      return `${baseUrl}?${queryParams}`;
-    },
-  
-    async executeRequest(url) {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
-  
-      const response = await fetch(url, {
-        signal: controller.signal
-      });
-  
-      clearTimeout(timeoutId);
-  
-      if (!response.ok) {
-        throw new Error(`API error: ${response.status}`);
-      }
-  
-      return response.json();
-    },
-  
-    normalizeError(error) {
-      // Standardize different error types
-      if (error.name === 'AbortError') {
-        return new Error('Request timed out');
-      }
-      return error instanceof Error ? error : new Error(String(error));
-    }
-  };
-  
-  // 2. Refactored API functions using new service
-  async function getWeatherData(city) {
-    try {
-      // First get coordinates
-      const geoData = await WeatherAPI.fetchWeatherData('geo/1.0/direct', { q: city });
-      if (!geoData?.length) throw new Error('Location not found');
-  
-      const { lat, lon, name, country } = geoData[0];
-  
-      // Get current and forecast in parallel
-      const [current, forecast] = await Promise.all([
-        WeatherAPI.fetchWeatherData('data/2.5/weather', { lat, lon }),
-        WeatherAPI.fetchWeatherData('data/2.5/forecast', { lat, lon })
-      ]);
-  
-      return {
-        cityName: `${name}, ${country}`,
-        current: processCurrentWeather(current),
-        daily: processForecastData(forecast)
-      };
-  
-    } catch (error) {
-      console.error('Weather data fetch failed:', error);
-      throw error;
-    }
+// 1. Update your HTML structure (if needed)
+/*
+<div class="relative">
+  <input id="cityInput" ...>
+  <div id="searchDropdown" class="hidden absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-xl max-h-60 overflow-y-auto">
+    <!-- Dynamic content -->
+    <div class="clear-search py-2 px-4 border-t border-gray-100 text-sm text-red-500 cursor-pointer">
+      <i class="fas fa-trash mr-2"></i> Clear history
+    </div>
+  </div>
+</div>
+*/
+
+// 2. CSS additions (in your <style> section)
+/*
+#searchDropdown {
+  scrollbar-width: thin;
+  scrollbar-color: #3B82F6 #E5E7EB;
+}
+
+#searchDropdown::-webkit-scrollbar {
+  width: 6px;
+}
+
+#searchDropdown::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 0 0 8px 8px;
+}
+
+#searchDropdown::-webkit-scrollbar-thumb {
+  background: #3B82F6;
+  border-radius: 8px;
+}
+
+.search-item {
+  padding: 10px 16px;
+  color: #1f2937; /* gray-800 */
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.search-item:hover {
+  background-color: #f3f4f6; /* gray-100 */
+}
+
+.search-item:active {
+  background-color: #e5e7eb; /* gray-200 */
+}
+
+@media (max-width: 640px) {
+  #searchDropdown {
+    max-height: 50vh;
+    position: fixed;
+    width: calc(100% - 2rem);
+    left: 1rem;
+    right: 1rem;
   }
-  
-  // 3. Updated location-based function
-  async function getWeatherDataByCoords(lat, lon) {
-    try {
-      const [geoData, current, forecast] = await Promise.all([
-        WeatherAPI.fetchWeatherData('geo/1.0/reverse', { lat, lon }),
-        WeatherAPI.fetchWeatherData('data/2.5/weather', { lat, lon }),
-        WeatherAPI.fetchWeatherData('data/2.5/forecast', { lat, lon })
-      ]);
-  
-      return {
-        cityName: geoData[0] ? `${geoData[0].name}, ${geoData[0].country}` : 'Current Location',
-        current: processCurrentWeather(current),
-        daily: processForecastData(forecast)
-      };
-  
-    } catch (error) {
-      console.error('Location weather fetch failed:', error);
-      throw error;
+}
+*/
+
+// 3. Updated JavaScript for dropdown
+function updateSearchDropdown() {
+    const dropdown = document.getElementById('searchDropdown');
+    dropdown.innerHTML = '';
+
+    if (recentSearches.length === 0) {
+        dropdown.classList.add('hidden');
+        return;
     }
-  }
-  
-  // 4. Clear cache when needed (e.g., on city change)
-  function clearWeatherCache() {
-    WeatherAPI.cache.clear();
-    console.log('Weather cache cleared');
-  }
+
+    // Add search items
+    recentSearches.forEach(city => {
+        const item = document.createElement('div');
+        item.className = 'search-item flex items-center';
+        item.innerHTML = `
+            <i class="fas fa-search text-gray-400 mr-3"></i>
+            <span class="truncate">${city}</span>
+        `;
+        
+        item.addEventListener('click', () => {
+            document.getElementById('cityInput').value = city;
+            handleSearch();
+            dropdown.classList.add('hidden');
+        });
+        
+        dropdown.appendChild(item);
+    });
+
+    // Add clear button
+    const clearBtn = document.createElement('div');
+    clearBtn.className = 'clear-search flex items-center py-2 px-4 border-t border-gray-100 text-sm text-red-500 cursor-pointer';
+    clearBtn.innerHTML = `
+        <i class="fas fa-trash mr-2"></i>
+        <span>Clear all</span>
+    `;
+    
+    clearBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        recentSearches = [];
+        localStorage.removeItem('recentSearches');
+        dropdown.classList.add('hidden');
+    });
+    
+    dropdown.appendChild(clearBtn);
+}
+
+// 4. Enhanced show/hide logic
+function showSearchDropdown() {
+    const dropdown = document.getElementById('searchDropdown');
+    const input = document.getElementById('cityInput');
+    
+    if (recentSearches.length > 0) {
+        // Position dropdown below input
+        const inputRect = input.getBoundingClientRect();
+        dropdown.style.width = `${inputRect.width}px`;
+        dropdown.style.left = `${inputRect.left}px`;
+        dropdown.style.top = `${inputRect.bottom + window.scrollY + 4}px`;
+        
+        dropdown.classList.remove('hidden');
+        
+        // Close when clicking outside
+        setTimeout(() => {
+            document.addEventListener('click', closeDropdownHandler);
+        }, 100);
+    }
+}
+
+function closeDropdownHandler(e) {
+    const dropdown = document.getElementById('searchDropdown');
+    if (!dropdown.contains(e.target) && e.target.id !== 'cityInput') {
+        dropdown.classList.add('hidden');
+        document.removeEventListener('click', closeDropdownHandler);
+    }
+}
+
+// 5. Initialize on load
+document.addEventListener('DOMContentLoaded', () => {
+    // Update input event listener
+    document.getElementById('cityInput').addEventListener('focus', () => {
+        updateSearchDropdown();
+        showSearchDropdown();
+    });
+    
+    // Handle window resize
+    window.addEventListener('resize', () => {
+        if (!document.getElementById('searchDropdown').classList.contains('hidden')) {
+            showSearchDropdown(); // Reposition on resize
+        }
+    });
+});
