@@ -26,3 +26,9 @@ A responsive weather application built with JavaScript, HTML, and Tailwind CSS t
    ```bash
    git clone https://github.com/your-username/weather-app.git
    cd weather-app
+
+## Git Hub Link
+https://github.com/maggie-369
+
+## Gut Hub Student-Registration-System
+https://github.com/maggie-369/Student_Registration_System
