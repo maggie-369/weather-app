@@ -1,102 +1,96 @@
 /**
- * Temperature Unit Toggle Feature
- * Allows switching between Celsius and Fahrenheit
- * Persists user preference in localStorage
- * Updates all displayed temperatures in UI
+ * iPhone SE (375x667) Responsive Enhancements
+ * Focuses on viewport-specific fixes for:
+ * - Layout restructuring
+ * - Font size adjustments
+ * - Touch target sizing
+ * - Forecast card scrolling
  */
 
-// 1. Add this to your HTML (place near weather display)
+// 1. Add this CSS media query (in your <style> section)
 /*
-<div class="unit-toggle flex justify-center mb-4">
-  <button id="celsiusBtn" class="px-4 py-2 bg-blue-500 text-white rounded-l-lg font-medium">°C</button>
-  <button id="fahrenheitBtn" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-r-lg font-medium">°F</button>
-</div>
+@media (max-width: 375px) { /* iPhone SE specific */
+  /* Base font scaling */
+  html { font-size: 14px; }
+  
+  /* Search bar adjustments */
+  #cityInput {
+    padding: 0.75rem 1rem;
+    font-size: 0.9rem;
+  }
+  
+  /* Current weather card */
+  .weather-card {
+    flex-direction: column;
+    padding: 1.25rem;
+  }
+  
+  /* Forecast horizontal scrolling */
+  .forecast-container {
+    padding-bottom: 0.5rem;
+    scroll-snap-type: x mandatory;
+  }
+  
+  .forecast-card {
+    min-width: 140px;
+    scroll-snap-align: start;
+    margin-right: 0.75rem;
+  }
+  
+  /* Button tap targets */
+  button, [role="button"] {
+    min-height: 44px; /* Apple recommended minimum */
+    min-width: 44px;
+  }
+  
+  /* Spacing adjustments */
+  .container {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+}
 */
 
-// 2. State management
-let temperatureUnit = localStorage.getItem('temperatureUnit') || 'celsius';
-
-// 3. DOM elements
-const celsiusBtn = document.getElementById('celsiusBtn');
-const fahrenheitBtn = document.getElementById('fahrenheitBtn');
-const tempElements = document.querySelectorAll('[data-temp]');
-
-// 4. Initialize toggle buttons
-function initUnitToggle() {
-    // Set initial active button
-    updateToggleButtons();
+// 2. Add this JavaScript viewport detection (in your main script)
+function optimizeForIPhoneSE() {
+    const isIPhoneSE = window.matchMedia('(max-width: 375px) and (max-height: 667px)').matches;
     
-    // Event listeners
-    celsiusBtn.addEventListener('click', () => setTemperatureUnit('celsius'));
-    fahrenheitBtn.addEventListener('click', () => setTemperatureUnit('fahrenheit'));
-    
-    // Apply to existing elements
-    convertAllTemperatures();
+    if (isIPhoneSE) {
+        console.log('Applying iPhone SE optimizations');
+        
+        // 1. Adjust forecast container for horizontal scrolling
+        const forecastContainer = document.getElementById('forecastContainer');
+        forecastContainer.classList.add('overflow-x-auto', 'whitespace-nowrap');
+        forecastContainer.classList.remove('flex-wrap');
+        
+        // 2. Make forecast cards inline-block
+        document.querySelectorAll('.forecast-card').forEach(card => {
+            card.classList.add('inline-block', 'align-top');
+            card.classList.remove('flex-shrink-0');
+        });
+        
+        // 3. Add touch-friendly padding
+        document.querySelectorAll('button').forEach(btn => {
+            btn.classList.add('py-3');
+        });
+    }
 }
 
-// 5. Core conversion functions
-function celsiusToFahrenheit(c) {
-    return (c * 9/5) + 32;
-}
-
-function fahrenheitToCelsius(f) {
-    return (f - 32) * 5/9;
-}
-
-// 6. Unit setting handler
-function setTemperatureUnit(unit) {
-    if (temperatureUnit === unit) return;
+// 3. Update your displayForecast function
+function displayForecast(dailyForecast) {
+    const forecastContainer = document.getElementById('forecastContainer');
+    forecastContainer.innerHTML = '';
     
-    temperatureUnit = unit;
-    localStorage.setItem('temperatureUnit', unit);
-    
-    updateToggleButtons();
-    convertAllTemperatures();
-    
-    console.log(`Switched to ${unit.toUpperCase()}`);
-}
-
-// 7. UI update functions
-function updateToggleButtons() {
-    celsiusBtn.classList.toggle('bg-blue-500', temperatureUnit === 'celsius');
-    celsiusBtn.classList.toggle('text-white', temperatureUnit === 'celsius');
-    celsiusBtn.classList.toggle('bg-gray-200', temperatureUnit !== 'celsius');
-    celsiusBtn.classList.toggle('text-gray-800', temperatureUnit !== 'celsius');
-    
-    fahrenheitBtn.classList.toggle('bg-blue-500', temperatureUnit === 'fahrenheit');
-    fahrenheitBtn.classList.toggle('text-white', temperatureUnit === 'fahrenheit');
-    fahrenheitBtn.classList.toggle('bg-gray-200', temperatureUnit !== 'fahrenheit');
-    fahrenheitBtn.classList.toggle('text-gray-800', temperatureUnit !== 'fahrenheit');
-}
-
-// 8. Temperature conversion for all elements
-function convertAllTemperatures() {
-    tempElements.forEach(el => {
-        const baseTemp = parseFloat(el.dataset.temp);
-        const displayTemp = temperatureUnit === 'celsius' 
-            ? baseTemp 
-            : celsiusToFahrenheit(baseTemp);
-            
-        el.textContent = `${displayTemp.toFixed(1)}°${temperatureUnit === 'celsius' ? 'C' : 'F'}`;
+    dailyForecast.forEach(day => {
+        const forecastCard = document.createElement('div');
+        forecastCard.className = window.innerWidth <= 375 
+            ? 'forecast-card inline-block align-top w-[140px] mr-3 p-3 rounded-xl bg-white/20' 
+            : 'forecast-card flex-shrink-0 rounded-xl p-4 w-full sm:w-48 text-center';
+        
+        // ... rest of your forecast card content
     });
 }
 
-// 9. Modified displayWeather function
-function displayWeather(data) {
-    // Store base temperatures in data attributes
-    document.getElementById('temperature').dataset.temp = data.current.temp;
-    
-    // Update forecast items similarly
-    document.querySelectorAll('.forecast-card').forEach((card, index) => {
-        const day = data.daily[index];
-        card.querySelector('.temp-display').dataset.temp = day.temp_max;
-    });
-    
-    // Initial display
-    convertAllTemperatures();
-    
-    // ... rest of your displayWeather function
-}
-
-// 10. Initialize on load
-document.addEventListener('DOMContentLoaded', initUnitToggle);
+// 4. Initialize on load and resize
+document.addEventListener('DOMContentLoaded', optimizeForIPhoneSE);
+window.addEventListener('resize', optimizeForIPhoneSE);
