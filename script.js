@@ -1,40 +1,52 @@
-const API_KEY = 'ff69b1a0298a70cf5d1a1fc051f23a21'; // Replace with your OpenWeatherMap API key
-const BASE_URL = 'https://api.openweathermap.org/data/2.5';
-const GEOCODE_URL = 'https://api.openweathermap.org/geo/1.0';
-const ICON_URL = 'https://openweathermap.org/img/wn/';
+// API Configuration
+const API_KEY = 'ff69b1a0298a70cf5d1a1fc051f23a21'; // OpenWeatherMap API key
+const BASE_URL = 'https://api.openweathermap.org/data/2.5'; // Base URL for weather data
+const GEOCODE_URL = 'https://api.openweathermap.org/geo/1.0'; // URL for geocoding API
+const ICON_URL = 'https://openweathermap.org/img/wn/'; // Base URL for weather icons
 
-// DOM Elements
-const cityInput = document.getElementById('cityInput');
-const searchBtn = document.getElementById('searchBtn');
-const currentLocationBtn = document.getElementById('currentLocationBtn');
-const searchDropdown = document.getElementById('searchDropdown');
-const currentWeather = document.getElementById('currentWeather');
-const forecastContainer = document.getElementById('forecastContainer');
-const loading = document.getElementById('loading');
-const error = document.getElementById('error');
-const loadingSkeleton = document.getElementById('loading-skeleton');
+// DOM Elements - Cache frequently accessed elements
+const cityInput = document.getElementById('cityInput'); // City search input
+const searchBtn = document.getElementById('searchBtn'); // Search button
+const currentLocationBtn = document.getElementById('currentLocationBtn'); // Current location button
+const searchDropdown = document.getElementById('searchDropdown'); // Recent searches dropdown
+const currentWeather = document.getElementById('currentWeather'); // Current weather display
+const forecastContainer = document.getElementById('forecastContainer'); // Forecast container
+const loading = document.getElementById('loading'); // Loading spinner
+const error = document.getElementById('error'); // Error message container
+const loadingSkeleton = document.getElementById('loading-skeleton'); // Loading skeleton UI
 
-// State
-const STORAGE_KEY = 'weatherAppRecentSearches';
-let recentSearches = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+// Application State
+const STORAGE_KEY = 'weatherAppRecentSearches'; // LocalStorage key for recent searches
+let recentSearches = JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; // Array to store recent searches
 
-// Initialize the app
+// Initialize the application when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
-    updateSearchDropdown();
+    updateSearchDropdown(); // Populate recent searches dropdown
     
-    // Event listeners
-    searchBtn.addEventListener('click', handleSearch);
-    currentLocationBtn.addEventListener('click', getCurrentLocationWeather);
+    // Set up event listeners
+    searchBtn.addEventListener('click', handleSearch); // Search button click
+    currentLocationBtn.addEventListener('click', getCurrentLocationWeather); // Current location button
     
+    // Handle Enter key in search input
     cityInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') handleSearch();
     });
     
+    // Show/hide recent searches dropdown
     cityInput.addEventListener('focus', showSearchDropdown);
     document.addEventListener('click', hideSearchDropdown);
 });
 
 // Main Functions
+
+/**
+ * Handles the city search functionality
+ * 1. Validates input
+ * 2. Shows loading state
+ * 3. Fetches weather data
+ * 4. Updates UI
+ * 5. Handles errors
+ */
 async function handleSearch() {
     const city = cityInput.value.trim();
     if (!city) {
@@ -55,26 +67,32 @@ async function handleSearch() {
     }
 }
 
+/**
+ * Gets weather for user's current location with fallback to IP-based location
+ * 1. Tries GPS location first
+ * 2. Falls back to IP location if GPS fails
+ * 3. Shows appropriate error messages
+ */
 async function getCurrentLocationWeather() {
     if (!navigator.geolocation) {
-        return await tryIpBasedLocation();
+        return await tryIpBasedLocation(); // Fallback if geolocation not supported
     }
 
     try {
         showLoading();
         
-        // Get GPS position
+        // Get GPS coordinates
         const gpsPosition = await getGpsLocation();
         const { latitude, longitude } = gpsPosition.coords;
         
-        // Get location name first
+        // Get human-readable location name
         const locationName = await getLocationName(latitude, longitude);
         
-        // Then get weather data
+        // Get weather data for coordinates
         const weather = await getWeatherDataByCoords(latitude, longitude);
         
         displayWeather(weather);
-        addToRecentSearches(locationName); // Use actual location name
+        addToRecentSearches(locationName);
         
     } catch (error) {
         console.error('GPS location failed, trying IP fallback:', error);
@@ -94,26 +112,32 @@ async function getCurrentLocationWeather() {
     }
 }
 
-// GPS-based location with proper timeouts
+/**
+ * Wrapper for geolocation API with timeout and high accuracy
+ * @returns Promise with position data
+ */
 function getGpsLocation() {
     return new Promise((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(
             resolve,
             reject,
             {
-                timeout: 10000,
-                maximumAge: 0,
-                enableHighAccuracy: true
+                timeout: 10000, // 10 second timeout
+                maximumAge: 0, // Don't use cached position
+                enableHighAccuracy: true // Request best possible accuracy
             }
         );
     });
 }
 
-// IP-based fallback
+/**
+ * Fallback location using IP address when GPS fails
+ * @returns Object with latitude, longitude, city and country
+ */
 async function tryIpBasedLocation() {
     try {
         const response = await fetch('https://ipapi.co/json/', {
-            signal: AbortSignal.timeout(5000)
+            signal: AbortSignal.timeout(5000) // 5 second timeout
         });
         
         const data = await response.json();
@@ -130,7 +154,11 @@ async function tryIpBasedLocation() {
     }
 }
 
-// Enhanced error messages
+/**
+ * Converts technical geolocation errors to user-friendly messages
+ * @param error Geolocation error object
+ * @returns String with friendly error message
+ */
 function getFriendlyLocationError(error) {
     const tips = `
     Troubleshooting Tips:
@@ -151,29 +179,16 @@ function getFriendlyLocationError(error) {
     }
 }
 
-function getFriendlyLocationError(error) {
-    switch(error.code) {
-        case error.PERMISSION_DENIED:
-            return 'Location access was denied. Please enable permissions in your browser settings.';
-        case error.POSITION_UNAVAILABLE:
-            return 'We couldn\'t detect your location. Please check: \n' +
-                   '1. Your device has location services enabled \n' +
-                   '2. You\'re connected to the internet \n' +
-                   '3. Try again outdoors if indoors';
-        case error.TIMEOUT:
-            return 'Location detection timed out. Please try again in an area with better signal.';
-        default:
-            return 'Couldn\'t determine your location. Error: ' + error.message;
-    }
-}
-
-// Make sure this is properly connected to your button
-document.getElementById('currentLocationBtn').addEventListener('click', getCurrentLocationWeather);
-
 // API Functions
+
+/**
+ * Fetches weather data for a city name
+ * @param city City name to search for
+ * @returns Object with weather data
+ */
 async function getWeatherData(city) {
     try {
-        // First get coordinates
+        // First get coordinates for the city
         const geoResponse = await fetch(
             `${GEOCODE_URL}/direct?q=${city}&limit=1&appid=${API_KEY}`
         ).catch(handleNetworkError);
@@ -184,7 +199,7 @@ async function getWeatherData(city) {
         
         const { lat, lon, name, country } = geoData[0];
         
-        // Then get weather data
+        // Get current weather data
         const weatherResponse = await fetch(
             `${BASE_URL}/weather?lat=${lat}&lon=${lon}&units=metric&appid=${API_KEY}`
         ).catch(handleNetworkError);
@@ -192,7 +207,7 @@ async function getWeatherData(city) {
         if (!weatherResponse.ok) throw new Error('Weather data not available');
         const currentData = await weatherResponse.json();
         
-        // Get forecast
+        // Get forecast data
         const forecastResponse = await fetch(
             `${BASE_URL}/forecast?lat=${lat}&lon=${lon}&units=metric&appid=${API_KEY}`
         ).catch(handleNetworkError);
@@ -210,9 +225,15 @@ async function getWeatherData(city) {
     }
 }
 
+/**
+ * Fetches weather data by coordinates
+ * @param lat Latitude
+ * @param lon Longitude
+ * @returns Object with weather data
+ */
 async function getWeatherDataByCoords(lat, lon) {
     try {
-        // Get location name
+        // Get human-readable location name
         const geoResponse = await fetch(
             `${GEOCODE_URL}/reverse?lat=${lat}&lon=${lon}&limit=1&appid=${API_KEY}`
         ).catch(handleNetworkError);
@@ -246,16 +267,27 @@ async function getWeatherDataByCoords(lat, lon) {
     }
 }
 
+/**
+ * Handles network errors consistently
+ * @param error Error object
+ * @throws Error with user-friendly message
+ */
 function handleNetworkError(error) {
     console.error("Network error:", error);
     throw new Error("Failed to connect to weather service");
 }
 
-// Data Processing
+// Data Processing Functions
+
+/**
+ * Processes raw current weather data into display-ready format
+ * @param data Raw API response
+ * @returns Processed current weather object
+ */
 function processCurrentWeather(data) {
     return {
-        date: formatDate(new Date(data.dt * 1000)),
-        temp: Math.round(data.main.temp * 10) / 10,
+        date: formatDate(new Date(data.dt * 1000)), // Convert UNIX timestamp to Date
+        temp: Math.round(data.main.temp * 10) / 10, // Round to 1 decimal place
         feels_like: Math.round(data.main.feels_like * 10) / 10,
         humidity: data.main.humidity,
         wind_speed: Math.round(data.wind.speed * 10) / 10,
@@ -265,19 +297,25 @@ function processCurrentWeather(data) {
     };
 }
 
+/**
+ * Processes forecast data into daily forecasts
+ * @param forecastData Raw forecast API response
+ * @returns Array of daily forecast objects
+ */
 function processForecastData(forecastData) {
     const dailyForecasts = [];
-    const daysProcessed = new Set();
+    const daysProcessed = new Set(); // Track unique days
     
     forecastData.list.forEach(item => {
         const date = new Date(item.dt * 1000);
         const dateString = date.toDateString();
         
+        // Only include one forecast per day
         if (!daysProcessed.has(dateString)) {
             daysProcessed.add(dateString);
             
             dailyForecasts.push({
-                date: date, // Store Date object
+                date: date, // Store Date object for formatting
                 temp_min: Math.round(item.main.temp_min * 10) / 10,
                 temp_max: Math.round(item.main.temp_max * 10) / 10,
                 humidity: item.main.humidity,
@@ -287,12 +325,17 @@ function processForecastData(forecastData) {
         }
     });
     
-    return dailyForecasts.slice(0, 5);
+    return dailyForecasts.slice(0, 5); // Return next 5 days
 }
 
 // Display Functions
+
+/**
+ * Updates the UI with weather data
+ * @param data Processed weather data object
+ */
 function displayWeather(data) {
-    // Current weather
+    // Current weather section
     const current = data.current;
     document.getElementById('location').textContent = data.cityName;
     document.getElementById('date').textContent = current.date;
@@ -302,23 +345,29 @@ function displayWeather(data) {
     document.getElementById('conditions').innerHTML = `Conditions: <span class="font-medium">${current.description}</span>`;
     document.getElementById('weatherIcon').src = `${ICON_URL}${current.icon}@2x.png`;
     
-    // Forecast
+    // Forecast section
     displayForecast(data.daily);
-    currentWeather.classList.remove('hidden');
+    currentWeather.classList.remove('hidden'); // Show weather container
 }
 
+/**
+ * Creates and displays forecast cards
+ * @param dailyForecast Array of daily forecast data
+ */
 function displayForecast(dailyForecast) {
     const forecastContainer = document.getElementById('forecastContainer');
-    forecastContainer.innerHTML = '';
+    forecastContainer.innerHTML = ''; // Clear previous forecasts
     
     dailyForecast.forEach(day => {
         const dateObj = new Date(day.date);
         const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'short' });
         const date = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
         
+        // Create forecast card element
         const forecastCard = document.createElement('div');
         forecastCard.className = 'forecast-card flex-shrink-0 rounded-xl p-4 w-full sm:w-48 text-center';
         
+        // Populate card with forecast data
         forecastCard.innerHTML = `
             <div class="font-bold mb-1">${dayName}</div>
             <div class="text-sm mb-2">${date}</div>
@@ -334,35 +383,44 @@ function displayForecast(dailyForecast) {
 }
 
 // Recent Searches Functions
+
+/**
+ * Adds a city to recent searches and updates storage
+ * @param city City name to add
+ */
 function addToRecentSearches(city) {
-    // Remove duplicates (case insensitive)
+    // Remove any existing entries for this city (case insensitive)
     recentSearches = recentSearches.filter(item => 
         item.toLowerCase() !== city.toLowerCase()
     );
     
-    // Add to beginning of array
+    // Add to beginning of array (most recent first)
     recentSearches.unshift(city);
     
-    // Keep only last 5 searches
+    // Limit to 5 most recent searches
     if (recentSearches.length > 5) {
         recentSearches.pop();
     }
     
-    // Save to localStorage
+    // Persist to localStorage
     localStorage.setItem(STORAGE_KEY, JSON.stringify(recentSearches));
     
-    // Update dropdown
+    // Update the dropdown UI
     updateSearchDropdown();
 }
 
+/**
+ * Updates the recent searches dropdown menu
+ */
 function updateSearchDropdown() {
-    searchDropdown.innerHTML = '';
+    searchDropdown.innerHTML = ''; // Clear existing items
     
     if (recentSearches.length === 0) {
         searchDropdown.classList.add('hidden');
         return;
     }
     
+    // Add each recent search as a clickable item
     recentSearches.forEach(city => {
         const item = document.createElement('div');
         item.className = 'px-4 py-2 hover:bg-gray-100 cursor-pointer flex items-center';
@@ -378,7 +436,7 @@ function updateSearchDropdown() {
         searchDropdown.appendChild(item);
     });
     
-    // Add clear button
+    // Add clear button at bottom
     const clearBtn = document.createElement('div');
     clearBtn.className = 'px-4 py-2 text-red-500 text-sm cursor-pointer border-t border-gray-200 flex items-center';
     clearBtn.innerHTML = `
@@ -386,7 +444,7 @@ function updateSearchDropdown() {
         <span>Clear recent searches</span>
     `;
     clearBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
+        e.stopPropagation(); // Prevent dropdown from closing immediately
         recentSearches = [];
         localStorage.removeItem(STORAGE_KEY);
         searchDropdown.classList.add('hidden');
@@ -394,12 +452,19 @@ function updateSearchDropdown() {
     searchDropdown.appendChild(clearBtn);
 }
 
+/**
+ * Shows the recent searches dropdown
+ */
 function showSearchDropdown() {
     if (recentSearches.length > 0) {
         searchDropdown.classList.remove('hidden');
     }
 }
 
+/**
+ * Hides the recent searches dropdown when clicking outside
+ * @param e Click event
+ */
 function hideSearchDropdown(e) {
     if (!e.target.closest('#cityInput') && !e.target.closest('#searchDropdown')) {
         searchDropdown.classList.add('hidden');
@@ -407,6 +472,12 @@ function hideSearchDropdown(e) {
 }
 
 // Utility Functions
+
+/**
+ * Formats a Date object into a readable string
+ * @param date Date object to format
+ * @returns Formatted date string
+ */
 function formatDate(date) {
     return date.toLocaleDateString('en-US', { 
         weekday: 'short', 
@@ -416,17 +487,27 @@ function formatDate(date) {
     });
 }
 
+/**
+ * Shows loading state (spinner and skeleton UI)
+ */
 function showLoading() {
     loadingSkeleton.classList.remove('hidden');
     loading.classList.remove('hidden');
     currentWeather.classList.add('hidden');
 }
 
+/**
+ * Hides loading state
+ */
 function hideLoading() {
     loadingSkeleton.classList.add('hidden');
     loading.classList.add('hidden');
 }
 
+/**
+ * Displays an error message to the user
+ * @param message Error message to display
+ */
 function showError(message) {
     error.innerHTML = `
         <div class="flex items-center">
@@ -435,14 +516,18 @@ function showError(message) {
         </div>
     `;
     error.classList.remove('hidden');
+    // Auto-hide after 5 seconds
     setTimeout(() => error.classList.add('hidden'), 5000);
 }
 
+/**
+ * Hides any visible error message
+ */
 function hideError() {
     error.classList.add('hidden');
 }
 
-// Autocomplete functionality
+// Autocomplete functionality (currently unused in this version)
 cityInput.addEventListener('input', async (e) => {
     const query = e.target.value;
     if(query.length > 2) {
@@ -451,6 +536,12 @@ cityInput.addEventListener('input', async (e) => {
     }
 });
 
+/**
+ * Gets a human-readable location name from coordinates
+ * @param lat Latitude
+ * @param lon Longitude
+ * @returns Location name string
+ */
 async function getLocationName(lat, lon) {
     try {
         const response = await fetch(
