@@ -1,96 +1,164 @@
 /**
- * iPhone SE (375x667) Responsive Enhancements
- * Focuses on viewport-specific fixes for:
- * - Layout restructuring
- * - Font size adjustments
- * - Touch target sizing
- * - Forecast card scrolling
+ * API Call Optimization Refactor
+ * Key improvements:
+ * - Request caching
+ * - Deduplication
+ * - Error resilience
+ * - Parameter validation
  */
 
-// 1. Add this CSS media query (in your <style> section)
-/*
-@media (max-width: 375px) { /* iPhone SE specific */
-  /* Base font scaling */
-  html { font-size: 14px; }
-  
-  /* Search bar adjustments */
-  #cityInput {
-    padding: 0.75rem 1rem;
-    font-size: 0.9rem;
-  }
-  
-  /* Current weather card */
-  .weather-card {
-    flex-direction: column;
-    padding: 1.25rem;
-  }
-  
-  /* Forecast horizontal scrolling */
-  .forecast-container {
-    padding-bottom: 0.5rem;
-    scroll-snap-type: x mandatory;
-  }
-  
-  .forecast-card {
-    min-width: 140px;
-    scroll-snap-align: start;
-    margin-right: 0.75rem;
-  }
-  
-  /* Button tap targets */
-  button, [role="button"] {
-    min-height: 44px; /* Apple recommended minimum */
-    min-width: 44px;
-  }
-  
-  /* Spacing adjustments */
-  .container {
-    padding-left: 1rem;
-    padding-right: 1rem;
-  }
-}
-*/
+// 1. Create API service module
+const WeatherAPI = {
+    cache: new Map(),
+    lastRequestTime: 0,
+    RATE_LIMIT: 1000, // 1 second between requests
 
-// 2. Add this JavaScript viewport detection (in your main script)
-function optimizeForIPhoneSE() {
-    const isIPhoneSE = window.matchMedia('(max-width: 375px) and (max-height: 667px)').matches;
-    
-    if (isIPhoneSE) {
-        console.log('Applying iPhone SE optimizations');
+    /**
+     * Get weather data with caching and retry logic
+     * @param {string} endpoint - API endpoint ('weather'|'forecast')
+     * @param {Object} params - Request parameters
+     * @param {number} retries - Remaining retry attempts
+     * @returns {Promise<Object>}
+     */
+    async fetchWeatherData(endpoint, params = {}, retries = 2) {
+        // Validate input
+        if (!endpoint || !API_KEY) {
+            throw new Error('Invalid API configuration');
+        }
+
+        // Create cache key
+        const cacheKey = `${endpoint}:${JSON.stringify(params)}`;
         
-        // 1. Adjust forecast container for horizontal scrolling
-        const forecastContainer = document.getElementById('forecastContainer');
-        forecastContainer.classList.add('overflow-x-auto', 'whitespace-nowrap');
-        forecastContainer.classList.remove('flex-wrap');
+        // Check cache first
+        if (this.cache.has(cacheKey)) {
+            const { data, timestamp } = this.cache.get(cacheKey);
+            if (Date.now() - timestamp < 300000) { // 5 minute cache
+                console.log(`Returning cached data for ${cacheKey}`);
+                return data;
+            }
+        }
+
+        // Rate limiting
+        const now = Date.now();
+        if (now - this.lastRequestTime < this.RATE_LIMIT) {
+            await new Promise(resolve => 
+                setTimeout(resolve, this.RATE_LIMIT - (now - this.lastRequestTime))
+            );
+        }
+
+        try {
+            // Build URL
+            const url = new URL(`${BASE_URL}/${endpoint}`);
+            url.searchParams.append('appid', API_KEY);
+            url.searchParams.append('units', 'metric');
+            
+            // Add parameters
+            Object.entries(params).forEach(([key, value]) => {
+                if (value !== undefined) {
+                    url.searchParams.append(key, value);
+                }
+            });
+
+            console.log(`Fetching: ${url.toString()}`);
+            
+            const response = await fetch(url, {
+                signal: AbortSignal.timeout(5000) // 5 second timeout
+            });
+
+            this.lastRequestTime = Date.now();
+
+            if (!response.ok) {
+                throw new Error(`API Error: ${response.status}`);
+            }
+
+            const data = await response.json();
+            
+            // Cache successful responses
+            this.cache.set(cacheKey, {
+                data,
+                timestamp: Date.now()
+            });
+
+            return data;
+
+        } catch (error) {
+            console.warn(`API request failed (${retries} retries left):`, error);
+            
+            if (retries > 0) {
+                return this.fetchWeatherData(endpoint, params, retries - 1);
+            }
+
+            throw new Error(`Failed after multiple attempts: ${error.message}`);
+        }
+    },
+
+    // Specific endpoint methods
+    async getCurrentWeather(city) {
+        return this.fetchWeatherData('weather', { q: city });
+    },
+
+    async getWeatherByCoords(lat, lon) {
+        return this.fetchWeatherData('weather', { lat, lon });
+    },
+
+    async getForecast(lat, lon) {
+        return this.fetchWeatherData('forecast', { lat, lon });
+    }
+};
+
+// 2. Replace old API calls with optimized versions
+async function getWeatherData(city) {
+    try {
+        // First get coordinates
+        const geoResponse = await fetch(
+            `${GEOCODE_URL}/direct?q=${city}&limit=1&appid=${API_KEY}`
+        );
+        const geoData = await geoResponse.json();
         
-        // 2. Make forecast cards inline-block
-        document.querySelectorAll('.forecast-card').forEach(card => {
-            card.classList.add('inline-block', 'align-top');
-            card.classList.remove('flex-shrink-0');
-        });
-        
-        // 3. Add touch-friendly padding
-        document.querySelectorAll('button').forEach(btn => {
-            btn.classList.add('py-3');
-        });
+        if (!geoData.length) throw new Error('City not found');
+        const { lat, lon, name, country } = geoData[0];
+
+        // Parallel API calls
+        const [current, forecast] = await Promise.all([
+            WeatherAPI.getWeatherByCoords(lat, lon),
+            WeatherAPI.getForecast(lat, lon)
+        ]);
+
+        return {
+            cityName: `${name}, ${country}`,
+            current: processCurrentWeather(current),
+            daily: processForecastData(forecast)
+        };
+
+    } catch (error) {
+        console.error('Weather data fetch failed:', error);
+        throw new Error(`Could not retrieve weather: ${error.message}`);
     }
 }
 
-// 3. Update your displayForecast function
-function displayForecast(dailyForecast) {
-    const forecastContainer = document.getElementById('forecastContainer');
-    forecastContainer.innerHTML = '';
+// 3. Update helper functions
+function processCurrentWeather(data) {
+    // Add data validation
+    if (!data?.main || !data.weather) {
+        throw new Error('Invalid current weather data');
+    }
     
-    dailyForecast.forEach(day => {
-        const forecastCard = document.createElement('div');
-        forecastCard.className = window.innerWidth <= 375 
-            ? 'forecast-card inline-block align-top w-[140px] mr-3 p-3 rounded-xl bg-white/20' 
-            : 'forecast-card flex-shrink-0 rounded-xl p-4 w-full sm:w-48 text-center';
-        
-        // ... rest of your forecast card content
-    });
+    return {
+        temp: roundTemp(data.main.temp),
+        feels_like: roundTemp(data.main.feels_like),
+        humidity: data.main.humidity,
+        wind_speed: roundTemp(data.wind.speed),
+        description: data.weather[0]?.description || 'N/A',
+        icon: data.weather[0]?.icon || '01d'
+    };
 }
 
-// 4. Initialize on load and resize
-document.addEventListener('DOMContentLoaded', optimizeForIPhoneSE);
-window.addEventListener('resize', optimizeForIPhoneSE);
+function roundTemp(value) {
+    return Math.round((Number(value) || 0) * 10) / 10;
+}
+
+// 4. Initialize API service
+document.addEventListener('DOMContentLoaded', () => {
+    // Clear cache when page reloads
+    WeatherAPI.cache.clear();
+});
