@@ -2,7 +2,6 @@
 
 A responsive weather application built with JavaScript, HTML, and Tailwind CSS that displays current and 5-day forecasts using the OpenWeatherMap API.
 
-![App Screenshot](/screenshot.png) <!-- Add your screenshot later -->
 
 ## Features
 
