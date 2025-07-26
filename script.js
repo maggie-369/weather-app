@@ -1,193 +1,204 @@
 /**
- * Current Location Button Implementation
- * Provides accurate weather for user's current position with:
- * - GPS-based location detection
- * - IP-based fallback
- * - Permission handling
- * - Error recovery
+ * CORE WEATHER COMPONENTS
+ * Modular components for displaying weather data
+ * Includes:
+ * - Current weather card
+ * - Forecast cards
+ * - Weather condition icons
+ * - Measurement displays
  */
 
-// 1. HTML Button (reference)
-/*
-<button id="currentLocationBtn" class="flex items-center justify-center gap-2 bg-weather-accent text-weather-dark px-6 py-3 rounded-full font-medium hover:bg-white transition">
-  <i class="fas fa-location-arrow"></i>
-  <span>Use Current Location</span>
-</button>
-*/
-
-// 2. Main Location Functionality
-class LocationService {
-    constructor() {
-      this.API_KEY = 'YOUR_OPENWEATHERMAP_API_KEY';
-      this.BASE_URL = 'https://api.openweathermap.org/data/2.5';
-      this.GEOCODE_URL = 'https://api.openweathermap.org/geo/1.0';
-      this.locationCache = new Map();
-    }
-  
-    /**
-     * Initialize location button functionality
-     */
-    init() {
-      const locationBtn = document.getElementById('currentLocationBtn');
-      locationBtn.addEventListener('click', () => this.handleLocationRequest());
-      
-      // Check for cached location
-      this.checkCachedLocation();
-    }
-  
-    /**
-     * Main location handling flow
-     */
-    async handleLocationRequest() {
-      try {
-        this.showLoadingState(true);
-        
-        // Step 1: Try precise GPS location
-        const position = await this.getGPSPosition();
-        const weather = await this.processLocation(position);
-        
-        // Step 2: Update UI
-        this.displayWeather(weather);
-        this.addToRecentSearches(`My Location (${weather.cityName})`);
-        
-      } catch (error) {
-        console.error('Location error:', error);
-        await this.handleLocationError(error);
-      } finally {
-        this.showLoadingState(false);
-      }
-    }
-  
-    /**
-     * Attempt GPS location with error handling
-     */
-    async getGPSPosition() {
-      return new Promise((resolve, reject) => {
-        if (!navigator.geolocation) {
-          reject(new Error('GEOLOCATION_UNAVAILABLE'));
-          return;
-        }
-  
-        navigator.geolocation.getCurrentPosition(
-          position => {
-            // Validate coordinates
-            if (!position?.coords?.latitude || !position?.coords?.longitude) {
-              reject(new Error('INVALID_COORDINATES'));
-            } else {
-              resolve(position);
-            }
-          },
-          error => {
-            reject(this.translateGeolocationError(error));
-          },
-          {
-            timeout: 10000,
-            maximumAge: 300000, // 5 minute cache
-            enableHighAccuracy: true
-          }
-        );
-      });
-    }
-  
-    /**
-     * Process obtained location into weather data
-     */
-    async processLocation(position) {
-      const { latitude, longitude } = position.coords;
-      
-      // Check cache first
-      const cacheKey = `${latitude.toFixed(2)},${longitude.toFixed(2)}`;
-      if (this.locationCache.has(cacheKey)) {
-        return this.locationCache.get(cacheKey);
-      }
-  
-      // Get location details
-      const [cityName, weatherData] = await Promise.all([
-        this.getLocationName(latitude, longitude),
-        this.getWeatherData(latitude, longitude)
-      ]);
-  
-      const result = { cityName, weatherData };
-      this.locationCache.set(cacheKey, result);
-      return result;
-    }
-  
-    /**
-     * Fallback error handling
-     */
-    async handleLocationError(error) {
-      const errorElement = document.getElementById('locationError');
-      
-      switch(error.code) {
-        case 'PERMISSION_DENIED':
-          errorElement.textContent = 'Please enable location permissions in browser settings';
-          break;
-          
-        case 'TIMEOUT':
-          // Attempt IP-based fallback
-          try {
-            const ipLocation = await this.getIPLocation();
-            const weather = await this.processLocation({
-              coords: {
-                latitude: ipLocation.lat,
-                longitude: ipLocation.lon
-              }
-            });
-            this.displayWeather(weather);
-            this.addToRecentSearches(`Approximate: ${ipLocation.city}`);
-            return;
-          } catch (ipError) {
-            errorElement.textContent = 'Could not determine your location. Please try again or search manually.';
-          }
-          break;
-          
-        default:
-          errorElement.textContent = error.message;
-      }
-      
-      errorElement.classList.remove('hidden');
-    }
-  
-    // Helper methods
-    async getLocationName(lat, lon) {
-      const response = await fetch(`${this.GEOCODE_URL}/reverse?lat=${lat}&lon=${lon}&limit=1&appid=${this.API_KEY}`);
-      const data = await response.json();
-      return data[0]?.name || 'Current Location';
-    }
-  
-    async getWeatherData(lat, lon) {
-      const response = await fetch(`${this.BASE_URL}/weather?lat=${lat}&lon=${lon}&units=metric&appid=${this.API_KEY}`);
-      return response.json();
-    }
-  
-    async getIPLocation() {
-      const response = await fetch('https://ipapi.co/json/');
-      return response.json();
-    }
-  
-    translateGeolocationError(error) {
-      const errors = {
-        1: { code: 'PERMISSION_DENIED', message: 'Location access denied' },
-        2: { code: 'POSITION_UNAVAILABLE', message: 'Location unavailable' },
-        3: { code: 'TIMEOUT', message: 'Location request timed out' }
+// 1. Weather Card Component
+class WeatherCard {
+    constructor(containerId) {
+      this.container = document.getElementById(containerId);
+      this.elements = {
+        location: null,
+        date: null,
+        icon: null,
+        temp: null,
+        wind: null,
+        humidity: null,
+        conditions: null
       };
-      return errors[error.code] || { code: 'UNKNOWN', message: error.message };
+      this.init();
     }
   
-    showLoadingState(show) {
-      const btn = document.getElementById('currentLocationBtn');
-      if (show) {
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Locating...';
-        btn.disabled = true;
-      } else {
-        btn.innerHTML = '<i class="fas fa-location-arrow"></i> Use Current Location';
-        btn.disabled = false;
-      }
+    init() {
+      // Create DOM structure
+      this.container.innerHTML = `
+        <div class="weather-card bg-gradient-to-br from-blue-400 to-blue-600 rounded-xl p-6 text-white">
+          <div class="flex flex-col md:flex-row justify-between">
+            <div class="weather-info-left">
+              <h2 id="location" class="text-2xl font-bold mb-1"></h2>
+              <p id="date" class="text-blue-100 mb-4"></p>
+              <div class="temp-container flex items-center">
+                <img id="weatherIcon" class="w-20 h-20" alt="Weather icon">
+                <span id="temperature" class="text-5xl font-bold"></span>
+              </div>
+            </div>
+            <div class="weather-info-right mt-4 md:mt-0">
+              <div class="space-y-3">
+                <div class="weather-wind flex items-center">
+                  <i class="fas fa-wind text-blue-200 mr-2 w-6 text-center"></i>
+                  <span id="wind"></span>
+                </div>
+                <div class="weather-humidity flex items-center">
+                  <i class="fas fa-tint text-blue-200 mr-2 w-6 text-center"></i>
+                  <span id="humidity"></span>
+                </div>
+                <div class="weather-conditions flex items-center">
+                  <i class="fas fa-cloud text-blue-200 mr-2 w-6 text-center"></i>
+                  <span id="conditions"></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+  
+      // Cache DOM references
+      this.elements.location = document.getElementById('location');
+      this.elements.date = document.getElementById('date');
+      this.elements.icon = document.getElementById('weatherIcon');
+      this.elements.temp = document.getElementById('temperature');
+      this.elements.wind = document.getElementById('wind');
+      this.elements.humidity = document.getElementById('humidity');
+      this.elements.conditions = document.getElementById('conditions');
+    }
+  
+    update(data) {
+      this.elements.location.textContent = data.location;
+      this.elements.date.textContent = data.date;
+      this.elements.icon.src = `https://openweathermap.org/img/wn/${data.icon}@2x.png`;
+      this.elements.temp.textContent = `${data.temp}°C`;
+      this.elements.wind.innerHTML = `Wind: <span class="font-medium">${data.windSpeed} M/S</span>`;
+      this.elements.humidity.innerHTML = `Humidity: <span class="font-medium">${data.humidity}%</span>`;
+      this.elements.conditions.innerHTML = `Conditions: <span class="font-medium">${data.conditions}</span>`;
     }
   }
   
-  // 3. Initialize on DOM load
+  // 2. Forecast Card Component
+  class ForecastCard {
+    constructor(containerId) {
+      this.container = document.getElementById(containerId);
+      this.cards = [];
+    }
+  
+    createCard(dayData) {
+      const card = document.createElement('div');
+      card.className = 'forecast-card bg-white/20 rounded-xl p-4 text-center backdrop-blur-sm';
+      card.innerHTML = `
+        <p class="font-medium mb-2">${dayData.day}</p>
+        <p class="text-sm mb-1">${dayData.date}</p>
+        <img src="https://openweathermap.org/img/wn/${dayData.icon}@2x.png" 
+             alt="${dayData.conditions}" 
+             class="w-16 h-16 mx-auto">
+        <p class="text-xl font-bold my-2">
+          <span class="min-temp">${dayData.tempMin}°</span> / 
+          <span class="max-temp">${dayData.tempMax}°</span>
+        </p>
+        <div class="text-sm space-y-1">
+          <p class="weather-wind">Wind: ${dayData.windSpeed} M/S</p>
+          <p class="weather-humidity">Humidity: ${dayData.humidity}%</p>
+        </div>
+      `;
+      return card;
+    }
+  
+    update(forecastData) {
+      this.container.innerHTML = '';
+      this.cards = [];
+      
+      forecastData.forEach(day => {
+        const card = this.createCard({
+          day: new Date(day.dt * 1000).toLocaleDateString('en-US', { weekday: 'short' }),
+          date: new Date(day.dt * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+          icon: day.weather[0].icon,
+          tempMin: Math.round(day.temp.min),
+          tempMax: Math.round(day.temp.max),
+          windSpeed: Math.round(day.wind_speed),
+          humidity: day.humidity,
+          conditions: day.weather[0].main
+        });
+        
+        this.container.appendChild(card);
+        this.cards.push(card);
+      });
+    }
+  }
+  
+  // 3. Weather Icon Component
+  const WeatherIcons = {
+    getIcon(conditionCode, size = '2x') {
+      const baseUrl = 'https://openweathermap.org/img/wn';
+      return `${baseUrl}/${conditionCode}@${size}.png`;
+    },
+  
+    getIconComponent(conditionCode, size = 'md') {
+      const sizes = {
+        sm: 'w-8 h-8',
+        md: 'w-12 h-12',
+        lg: 'w-16 h-16',
+        xl: 'w-20 h-20'
+      };
+      
+      return `
+        <img src="${this.getIcon(conditionCode)}" 
+             alt="${conditionCode}" 
+             class="${sizes[size]} mx-auto">
+      `;
+    }
+  };
+  
+  // 4. Measurement Display Component
+  class MeasurementDisplay {
+    constructor(type, value, unit) {
+      this.type = type;
+      this.value = value;
+      this.unit = unit;
+      this.icon = this.getIcon();
+    }
+  
+    getIcon() {
+      const icons = {
+        temperature: 'fa-temperature-high',
+        wind: 'fa-wind',
+        humidity: 'fa-tint',
+        pressure: 'fa-tachometer-alt'
+      };
+      return icons[this.type] || 'fa-info-circle';
+    }
+  
+    render() {
+      return `
+        <div class="measurement flex items-center py-1">
+          <i class="fas ${this.icon} mr-2 text-blue-200"></i>
+          <span class="font-medium">${this.type}:</span>
+          <span class="ml-1">${this.value} ${this.unit}</span>
+        </div>
+      `;
+    }
+  }
+  
+  // 5. Initialization
   document.addEventListener('DOMContentLoaded', () => {
-    const locationService = new LocationService();
-    locationService.init();
+    // Create main weather card
+    const currentWeather = new WeatherCard('currentWeather');
+    
+    // Create forecast container
+    const forecast = new ForecastCard('forecastContainer');
+    
+    // Example usage (will be replaced with real data)
+    currentWeather.update({
+      location: 'Loading...',
+      date: new Date().toLocaleDateString(),
+      icon: '01d',
+      temp: '--',
+      windSpeed: '--',
+      humidity: '--',
+      conditions: 'Loading weather...'
+    });
+    
+    forecast.update([]); // Empty forecast initially
   });
